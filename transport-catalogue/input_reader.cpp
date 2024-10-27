@@ -60,6 +60,30 @@ std::vector<std::string_view> Split(std::string_view string, char delim) {
 }
 
 /**
+* Парсит строку вида "3900m to Marushkino, 4200m to Tolstopaltsevo..." и возвращает вектор пар
+* ((остановка А, остановка Б), расстояние)
+*/
+std::vector<std::pair<size_t, std::string>> ParseDistances(const std::string &data) {
+  using namespace std::string_view_literals;
+  auto delim = "m to "sv;
+  std::vector<std::pair<size_t, std::string>> distances;
+  auto parts = Split(data, ',');
+
+  for (auto &part : parts) {
+    auto delim_pos = part.find(delim);
+
+    if (delim_pos == std::string::npos)
+      continue;
+
+    auto distance = std::stoul(std::string(part.substr(0, delim_pos)));
+    auto dest = part.substr(delim_pos + delim.size());
+    distances.emplace_back(distance, dest);
+  }
+
+  return distances;
+}
+
+/**
 * Парсит маршрут.
 * Для кольцевого маршрута (A>B>C>A) возвращает массив названий остановок [A,B,C,A]
 * Для некольцевого маршрута (A-B-C-D) возвращает массив названий остановок [A,B,C,D,C,B,A]
@@ -115,7 +139,17 @@ void InputReader::ApplyCommands(tc::TransportCatalogue& catalogue) const {
     if (command.command == "Stop")
       catalogue.AddStop(command.id, ParseCoordinates(command.description));
     else if (command.command == "Bus")
+      /* Я считаю что тут не нужен блок try {} catch () {}, потому что непонятно какой результат возвращать пользователю
+         в случе если метод AddRoute кинет исключение. Я трактую такой вариант как возникновение исключетельной
+         ситуации, и считаю справедливым выход программы из строя. */
+//      try {
       catalogue.AddRoute(command.id, ParseRoute(command.description));
+//      } catch (const std::out_of_range& e) {}
+
+  for (const auto &command : sorted_commands)
+    if (command.command == "Stop")
+      for (const auto &dist : ParseDistances(command.description))
+        catalogue.SetDistance({catalogue.GetStop(command.id), catalogue.GetStop(dist.second)}, dist.first);
 }
 
 void InputReader::ReadCommands(std::istream& is) {

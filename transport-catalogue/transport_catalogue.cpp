@@ -34,7 +34,7 @@ const Stop *TransportCatalogue::GetStop(const std::string_view& name) const {
   return it == stopname_to_stop_.end() ? nullptr : it->second;
 }
 
-const std::unordered_set<std::string_view>& TransportCatalogue::GetRoutes(const std::string_view& stop_name) const {
+const std::set<std::string_view> &TransportCatalogue::GetRoutes(const std::string_view &stop_name) const {
   return stopname_to_routenames_.at(stop_name);
 }
 
@@ -45,7 +45,14 @@ size_t CountUniqueStops(const std::vector<Stop *>& stops) {
   return names.size();
 }
 
-double ComputeDistanceRoute(const std::vector<Stop *>& stops) {
+double ComputeLineDistanceRoute(const std::vector<Stop *> &stops) {
+  double route_distance = 0;
+  for (size_t begin = 0, end = stops.size(); begin < (end - 1); ++begin)
+    route_distance += ComputeDistance(stops[begin]->coordinates_, stops[begin + 1]->coordinates_);
+  return route_distance;
+}
+
+double ComputeDirectDistanceRoute(const std::vector<Stop *>& stops) {
   double route_distance = 0;
   for (size_t begin = 0, end = stops.size(); begin < (end - 1); ++begin)
     route_distance += ComputeDistance(stops[begin]->coordinates_, stops[begin + 1]->coordinates_);
@@ -54,5 +61,27 @@ double ComputeDistanceRoute(const std::vector<Stop *>& stops) {
 
 RouteInfo TransportCatalogue::GetRouteInfo(const std::string_view& name) const {
   const auto route = routename_to_route_.at(name);
-  return RouteInfo{route->stops_.size(), CountUniqueStops(route->stops_), ComputeDistanceRoute(route->stops_)};
+  size_t real_route_length = 0;
+  for (size_t i = 0; i < route->stops_.size() - 1; ++i)
+    real_route_length += GetDistance({route->stops_[i], route->stops_[i + 1]});
+
+  return {route->stops_.size(), CountUniqueStops(route->stops_), ComputeDirectDistanceRoute(route->stops_),
+          real_route_length};
+}
+
+void TransportCatalogue::SetDistance(const std::pair<const Stop *, const Stop *> &stops, size_t distance) {
+  distances_.insert({stops, distance});
+}
+
+size_t TransportCatalogue::GetDistance(const std::pair<const Stop *, const Stop *> &stops) const {
+  auto it = distances_.find(stops);
+
+  if (it == distances_.end()) {
+    it = distances_.find({stops.second, stops.first});
+    if (it == distances_.end()) {
+      return std::numeric_limits<size_t>::max();
+    }
+  }
+
+  return it->second;
 }

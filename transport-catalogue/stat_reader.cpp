@@ -1,6 +1,7 @@
 #include "stat_reader.h"
 
 #include <string>
+#include <stdexcept>
 
 using namespace tc;
 
@@ -9,11 +10,17 @@ void PrintBusStat(const TransportCatalogue& catalogue, const std::string_view id
   if (nullptr == bus) {
     output << "Bus " << id << ": not found" << std::endl;
   } else {
+    /* Я считаю что тут не нужен блок try {} catch () {}, потому что непонятно какой результат возвращать пользователю
+       в случе если такой остановки нет. Я трактую такой вариант как возникновение исключетельной ситуации, и считаю
+       справедливым выход программы из строя. Ибо нефиг кормить программу абсурдными данными */
+//      try {
     const auto info = catalogue.GetRouteInfo(id);
     output << "Bus " << id << ": "
            << info.total_stops_ << " stops on route, "
            << info.unique_stops_ << " unique stops, "
-           << info.length_ << " route length" << std::endl;
+           << static_cast<double>(info.real_length_) << " route length, "
+           << static_cast<double>(info.real_length_) / info.direct_length_ << " curvature" << std::endl;
+//      } catch (const std::out_of_range &e) {}
   }
 }
 
@@ -22,13 +29,13 @@ void PrintStopStat(const TransportCatalogue& catalogue, const std::string_view i
   if (nullptr == stop) {
     output << "Stop " << id << ": not found";
   } else {
-    const auto &names = catalogue.GetRoutes(id);
-    if (names.empty()) {
-      output << "Stop " << id << ": no buses";
-    } else {
+    try {
+      const auto &names = catalogue.GetRoutes(id);
       output << "Stop " << id << ": buses";
       for (const auto& bus : names)
         output << " " << bus;
+    } catch (const std::out_of_range &) {
+      output << "Stop " << id << ": no buses";
     }
   }
   output << std::endl;
