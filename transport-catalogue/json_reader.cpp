@@ -6,7 +6,7 @@
 void JsonReader::ParseBaseRequests(const json::Array &requests) {
   for (const auto &request : requests) {
     BaseRequestDescription request_description;
-    const auto &request_map = request.AsMap();
+    const auto &request_map = request.AsDict();
     request_description.name = request_map.at("name").AsString();
     if (request_map.at("type").AsString() == "Bus") {
       request_description.type = TypeRequest::qRoute;
@@ -25,7 +25,7 @@ void JsonReader::ParseBaseRequests(const json::Array &requests) {
       request_description.type = TypeRequest::qStop;
       request_description.coordinates.lat = request_map.at("latitude").AsDouble();
       request_description.coordinates.lng = request_map.at("longitude").AsDouble();
-      for (const auto &stop : request_map.at("road_distances").AsMap()) {
+      for (const auto &stop : request_map.at("road_distances").AsDict()) {
         request_description.distances.insert({stop.first, stop.second.AsInt()});
       }
     }
@@ -88,7 +88,7 @@ void JsonReader::ParseRenderSettings(const json::Dict &request) {
 void JsonReader::ParseStatRequests(const json::Array &requests) {
   for (const auto &request : requests) {
     StatRequestDescription new_request;
-    const auto &request_map = request.AsMap();
+    const auto &request_map = request.AsDict();
     new_request.id = request_map.at("id").AsInt();
 
     const auto &type_request = request_map.at("type").AsString();
@@ -107,13 +107,13 @@ void JsonReader::ParseStatRequests(const json::Array &requests) {
 
 void JsonReader::ParseStream(std::istream &ist) {
   node_ = json::Load(ist).GetRoot();
-  for (const auto &[key, value] : node_.AsMap()) {
+  for (const auto &[key, value] : node_.AsDict()) {
     if (key == "base_requests") {
       ParseBaseRequests(value.AsArray());
     } else if (key == "stat_requests") {
       ParseStatRequests(value.AsArray());
     } else if (key == "render_settings") {
-      ParseRenderSettings(value.AsMap());
+      ParseRenderSettings(value.AsDict());
     }
   }
 }
@@ -155,18 +155,22 @@ void JsonReader::ParseRequests(const RequestHandler &handler, std::ostream &out)
       case TypeRequest::qRoute:
         try {
           const auto route_info = handler.GetRouteInfo(name);
-          result.emplace_back(json::Dict{
-              {"request_id", json::Node(id)},
-              {"curvature", json::Node(static_cast<double>(route_info.real_length_) / route_info.direct_length_)},
-              {"route_length", json::Node(static_cast<int>(route_info.real_length_))},
-              {"stop_count", json::Node(static_cast<int>(route_info.total_stops_))},
-              {"unique_stop_count", json::Node(static_cast<int>(route_info.unique_stops_))},
-          });
+          result.emplace_back(json::Builder{}.
+            StartDict().
+              Key("request_id").Value(id).
+              Key("curvature").Value(static_cast<double>(route_info.real_length_) / route_info.direct_length_).
+              Key("route_length").Value(static_cast<int>(route_info.real_length_)).
+              Key("stop_count").Value(static_cast<int>(route_info.total_stops_)).
+              Key("unique_stop_count").Value(static_cast<int>(route_info.unique_stops_)).
+            EndDict().
+          Build());
         } catch (const std::out_of_range &) {
-          result.emplace_back(json::Dict{
-              {"request_id", json::Node(id)},
-              {"error_message", json::Node("not found")},
-          });
+          result.emplace_back(json::Builder{}.
+            StartDict().
+              Key("request_id").Value(id).
+              Key("error_message").Value("not found").
+            EndDict().
+          Build());
         }
         break;
       case TypeRequest::qStop:
@@ -175,23 +179,29 @@ void JsonReader::ParseRequests(const RequestHandler &handler, std::ostream &out)
           for (const auto &route : handler.GetRoutes(name)) {
             routes.emplace_back(std::string(route));
           }
-          result.emplace_back(json::Dict{
-              {"request_id", json::Node(id)},
-              {"buses", routes},
-          });
+          result.emplace_back(json::Builder{}.
+            StartDict().
+              Key("request_id").Value(id).
+              Key("buses").Value(routes).
+            EndDict().
+          Build());
         } catch (const std::out_of_range &) {
-          result.emplace_back(json::Dict{
-              {"request_id", json::Node(id)},
-              {"error_message", json::Node("not found")},
-          });
+          result.emplace_back(json::Builder{}.
+            StartDict().
+              Key("request_id").Value(id).
+              Key("error_message").Value("not found").
+            EndDict().
+          Build());
         }
         break;
       case TypeRequest::qMap:
         handler.RenderMap().Render(ss);
-        result.emplace_back(json::Dict{
-            {"request_id", json::Node(id)},
-            {"map", json::Node(ss.str())},
-        });
+        result.emplace_back(json::Builder{}.
+          StartDict().
+            Key("request_id").Value(id).
+            Key("map").Value(ss.str()).
+          EndDict().
+        Build());
         break;
       default:
         // Недостижимая ветка
