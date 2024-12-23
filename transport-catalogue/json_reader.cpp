@@ -3,6 +3,31 @@
 #include <algorithm>
 #include <sstream>
 
+namespace {
+
+void BuildRouteItem(json::Array &result, const router::RouteInfo::Moving &item) {
+  result.emplace_back(json::Builder{}.
+    StartDict().
+      Key("type").Value("Bus").
+      Key("bus").Value(std::string(item.routename)).
+      Key("time").Value(item.time.count()).
+      Key("span_count").Value(static_cast<int>(item.steps_count)).
+    EndDict().
+  Build());
+}
+
+void BuildRouteItem(json::Array &result, const router::RouteInfo::Waiting &item) {
+  result.emplace_back(json::Builder{}.
+    StartDict().
+      Key("type").Value("Wait").
+      Key("stop_name").Value(std::string(item.stopname)).
+      Key("time").Value(item.time.count()).
+    EndDict().
+  Build());
+}
+
+}
+
 void JsonReader::ParseBaseRequests(const json::Array &requests) {
   for (const auto &request : requests) {
     BaseRequestDescription request_description;
@@ -100,9 +125,18 @@ void JsonReader::ParseStatRequests(const json::Array &requests) {
       new_request.name = request_map.at("name").AsString();
     } else if (type_request == "Map") {
       new_request.type = TypeRequest::qMap;
+    } else if (type_request == "Route") {
+      new_request.type = TypeRequest::qPath;
+      new_request.path_from = request_map.at("from").AsString();
+      new_request.path_to = request_map.at("to").AsString();
     }
     stat_requests_.push_back(std::move(new_request));
   }
+}
+
+void JsonReader::ParseRouterSettings(const json::Dict &requests) {
+  router_settings_.bus_wait_time = std::chrono::minutes(requests.at("bus_wait_time").AsInt());
+  router_settings_.bus_velocity = requests.at("bus_velocity").AsDouble();
 }
 
 void JsonReader::ParseStream(std::istream &ist) {
@@ -114,6 +148,8 @@ void JsonReader::ParseStream(std::istream &ist) {
       ParseStatRequests(value.AsArray());
     } else if (key == "render_settings") {
       ParseRenderSettings(value.AsDict());
+    } else if (key == "routing_settings") {
+      ParseRouterSettings(value.AsDict());
     }
   }
 }
@@ -147,10 +183,14 @@ const renderer::Params &JsonReader::FillRenderSettings() const {
   return render_settings_;
 }
 
+const router::Params &JsonReader::FillRouterSettings() const {
+  return router_settings_;
+}
+
 void JsonReader::ParseRequests(const RequestHandler &handler, std::ostream &out) const {
   std::stringstream ss;
   json::Array result;
-  for (const auto &[id, type, name] : stat_requests_) {
+  for (const auto &[id, type, name, from, to] : stat_requests_) {
     switch (type) {
       case TypeRequest::qRoute:
         try {
@@ -203,10 +243,32 @@ void JsonReader::ParseRequests(const RequestHandler &handler, std::ostream &out)
           EndDict().
         Build());
         break;
+      case TypeRequest::qPath:
+        try {
+          const auto &routing = handler.FindRoute(from, to);
+          json::Array items;
+          for (const auto &item : routing.items) {
+            std::visit([&items](const auto &item) { BuildRouteItem(items, item); }, item);
+          }
+          result.emplace_back(json::Builder{}.
+            StartDict().
+              Key("request_id").Value(id).
+              Key("total_time").Value(routing.total_time.count()).
+              Key("items").Value(items).
+            EndDict().
+          Build());
+        } catch (const std::exception &) {
+          result.emplace_back(json::Builder{}.
+              StartDict().
+              Key("request_id").Value(id).
+              Key("error_message").Value("not found").
+              EndDict().
+              Build());
+        }
+        break;
       default:
         // Недостижимая ветка
         __builtin_unreachable();
-        break;
     }
   }
   json::Print(json::Document{result}, out);

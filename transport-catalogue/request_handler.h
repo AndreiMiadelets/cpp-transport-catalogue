@@ -2,6 +2,7 @@
 
 #include "map_renderer.h"
 #include "transport_catalogue.h"
+#include "transport_router.h"
 
 #include <optional>
 #include <unordered_set>
@@ -16,7 +17,8 @@ using tc::RouteInfo;
 enum class TypeRequest {
   qRoute,
   qStop,
-  qMap
+  qMap,
+  qPath
 };
 
 struct BaseRequestDescription {
@@ -48,12 +50,14 @@ struct StatRequestDescription {
   int id;
   TypeRequest type;
   std::string name;
+  std::string path_from;
+  std::string path_to;
 };
 
 class RequestHandler {
  public:
-  RequestHandler(const TransportCatalogue &db, const renderer::MapRenderer &renderer)
-      : db_(db), renderer_(renderer) {}
+  RequestHandler(const TransportCatalogue &db, const renderer::MapRenderer &renderer, const router::Router &router)
+      : db_(db), renderer_(renderer), router_(router) {}
 
   RouteInfo GetRouteInfo(std::string_view name) const;
 
@@ -61,7 +65,10 @@ class RequestHandler {
 
   svg::Document RenderMap() const;
 
+  router::RouteInfo FindRoute(std::string_view from, std::string_view to) const;
+
  private:
   const TransportCatalogue &db_;
   const renderer::MapRenderer &renderer_;
+  const router::Router &router_;
 };

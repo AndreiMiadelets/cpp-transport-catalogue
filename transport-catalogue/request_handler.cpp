@@ -11,3 +11,7 @@ const std::set<std::string_view> &RequestHandler::GetRoutes(const std::string_vi
 svg::Document RequestHandler::RenderMap() const {
   return renderer_.RenderSVG(db_.GetSortedAllNonEmptyRoutes(), db_.GetSortedAllNonEmptyStops());
 }
+
+router::RouteInfo RequestHandler::FindRoute(std::string_view from, std::string_view to) const {
+    return router_.FindRoute(from, to);
+}

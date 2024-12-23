@@ -3,6 +3,7 @@
 #include "json_builder.h"
 #include "map_renderer.h"
 #include "transport_catalogue.h"
+#include "transport_router.h"
 #include "request_handler.h"
 
 #include <vector>
@@ -25,6 +26,11 @@ class JsonReader {
   const renderer::Params &FillRenderSettings() const;
 
   /**
+   * Наполняет визуализатор карты данными, используя запросы из base_requests_
+   */
+  const router::Params &FillRouterSettings() const;
+
+  /**
    * Выводит данные в поток.
    * В качестве аргументов требует RequestHandler, являющийся оболочкой между системами "Каталог" и "Рендер"
    */
@@ -34,10 +40,12 @@ class JsonReader {
   void ParseBaseRequests(const json::Array &requests);
   void ParseStatRequests(const json::Array &requests);
   void ParseRenderSettings(const json::Dict &requests);
+  void ParseRouterSettings(const json::Dict &requests);
 
   json::Node node_ = nullptr;
 
   std::vector<BaseRequestDescription> base_requests_;
   std::vector<StatRequestDescription> stat_requests_;
   renderer::Params render_settings_;
+  router::Params router_settings_;
 };
